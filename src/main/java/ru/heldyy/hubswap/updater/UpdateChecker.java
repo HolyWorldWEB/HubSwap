@@ -12,6 +12,7 @@ import net.minecraft.util.Formatting;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
+import java.net.URI;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 
@@ -109,13 +110,13 @@ public class UpdateChecker {
                     .append(Text.literal("  "));
 
             String safeUrl = (url != null && url.startsWith("https://github.com/")) ? url : REPO_URL;
+
             Text link = Text.literal("[СКАЧАТЬ]")
                     .styled(style -> style
                             .withColor(Formatting.AQUA)
                             .withUnderline(true)
-                            .withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, safeUrl))
-                            .withHoverEvent(new HoverEvent(
-                                    HoverEvent.Action.SHOW_TEXT,
+                            .withClickEvent(new ClickEvent.OpenUrl(URI.create(safeUrl)))
+                            .withHoverEvent(new HoverEvent.ShowText(
                                     Text.literal("Открыть страницу релиза HubSwap")
                             ))
                     );
@@ -127,7 +128,6 @@ public class UpdateChecker {
     private static String normalizeVersion(String version) {
         if (version == null) return "0.0.0";
 
-        // Обрезаем метаданные (например, +mc1.20.1)
         String base = version.split("[+-]")[0];
 
         String clean = base.toLowerCase()

@@ -1,18 +1,24 @@
 package ru.heldyy.hubswap.executor;
 
+import com.google.gson.JsonParser;
+import com.mojang.serialization.DataResult;
+import com.mojang.serialization.JsonOps;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.screen.ingame.HandledScreen;
+import net.minecraft.component.DataComponentTypes;
+import net.minecraft.component.type.NbtComponent;
 import net.minecraft.item.ItemStack;
+import net.minecraft.item.Items;
 import net.minecraft.nbt.NbtCompound;
+import net.minecraft.nbt.NbtList;
 import net.minecraft.screen.slot.SlotActionType;
 import net.minecraft.text.Text;
-import net.minecraft.text.Text.Serializer;
+import net.minecraft.text.TextCodecs;
 import net.minecraft.world.World;
 import ru.heldyy.hubswap.HubSwap;
 import ru.heldyy.hubswap.config.ModConfig;
 import ru.heldyy.hubswap.gui.NotificationRenderer;
-import ru.heldyy.hubswap.gui.TransitionDetector;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -27,7 +33,8 @@ public class AnarchyExecutor {
         WAITING_HUB_WORLD,
         WAITING_MENU,
         WAITING_MENU1,
-        WAITING_MENU2
+        WAITING_MENU2,
+        HUB_ARRIVED
     }
 
     private static State state = State.IDLE;
@@ -38,12 +45,19 @@ public class AnarchyExecutor {
     private static World prevWorld = null;
     private static int ticks = 0;
     private static int timeoutTicks = 400;
+    private static int arrivalTicks = 0;
 
     private static final Map<String, Integer> currentNumbers = new HashMap<>();
 
     private static final Pattern LITE120_PATTERN = Pattern.compile("(?i)Лайт\\s*#?\\s*(\\d+)");
     private static final Pattern CLASSIC_PATTERN = Pattern.compile("(?i)Классик\\s*#?\\s*(\\d+)");
     private static final Pattern PRIME_PATTERN = Pattern.compile("(?i)Прайм\\s*#?\\s*(\\d+)");
+
+    private static final double HUB_X = 317.5;
+    private static final double HUB_Y = 28.0;
+    private static final double HUB_Z = 302.5;
+    private static final double HUB_RADIUS = 20.0;
+    private static final double HUB_Y_TOLERANCE = 10.0;
 
     // ---- TOP/DOWN ----
     public static void top(String modeName, int step) {
@@ -82,6 +96,7 @@ public class AnarchyExecutor {
         timeoutTicks = config.getTimeoutTicks();
         prevWorld = client.world;
         ticks = 0;
+        arrivalTicks = 0;
 
         currentNumbers.put(mode, number);
 
@@ -115,9 +130,11 @@ public class AnarchyExecutor {
                 }
                 if (foundType && foundServer) {
                     state = State.WAITING_MENU2;
+                    System.out.println("[HubSwap] Уже открыто меню Lite, сразу переходим к выбору сервера");
                     return;
                 } else if (foundType) {
                     state = State.WAITING_MENU1;
+                    System.out.println("[HubSwap] Уже открыто меню Lite, выбираем категорию");
                     return;
                 }
             } else {
@@ -133,23 +150,25 @@ public class AnarchyExecutor {
             }
         }
 
+        // Отправляем /hub
+        System.out.println("[HubSwap] Отправляем команду /hub");
         client.getNetworkHandler().sendChatCommand("hub");
         state = State.WAITING_HUB_WORLD;
         ticks = 0;
+        arrivalTicks = 0;
+        System.out.println("[HubSwap] Отправлена команда /hub, состояние WAITING_HUB_WORLD");
     }
 
     public static void onChatMessage(String msg) {
-        if (state != State.WAITING_HUB_WORLD || msg == null) return;
-        String lower = msg.toLowerCase();
-        if (lower.contains("уже подключен") || lower.contains("вы уже в лобби") || lower.contains("уже подключены")) {
-            sendMenuCommand();
-        }
+        // Не используем сообщения
     }
 
     public static void tick() {
+        // Если состояние IDLE, ничего не делаем
         if (state == State.IDLE) return;
+
+        // Если игрок временно отсутствует (например, во время телепортации), просто пропускаем тик
         if (client.player == null || client.getNetworkHandler() == null) {
-            reset();
             return;
         }
 
@@ -162,14 +181,37 @@ public class AnarchyExecutor {
 
         switch (state) {
             case WAITING_HUB_WORLD -> {
-                if (client.world != null && client.world != prevWorld) {
+                arrivalTicks++;
+                // Ждём 20 тиков (≈1 секунда) для стабилизации после телепортации
+                if (arrivalTicks >= 1) {
+                    System.out.println("[HubSwap] Задержка 1 тиков прошла, переходим в HUB_ARRIVED");
+                    state = State.HUB_ARRIVED;
+                    arrivalTicks = 0;
+                }
+            }
+
+            case HUB_ARRIVED -> {
+                arrivalTicks++;
+                if (arrivalTicks >= 5) {
+                    System.out.println("[HubSwap] Отправляем команду меню после задержки");
                     sendMenuCommand();
                 }
             }
+
             case WAITING_MENU1 -> scanMenu1();
             case WAITING_MENU2 -> scanMenu2();
             case WAITING_MENU -> scanMenu();
         }
+    }
+
+    private static boolean isInHub() {
+        if (client.player == null) return false;
+        double x = client.player.getX();
+        double y = client.player.getY();
+        double z = client.player.getZ();
+        return Math.abs(x - HUB_X) <= HUB_RADIUS
+                && Math.abs(y - HUB_Y) <= HUB_Y_TOLERANCE
+                && Math.abs(z - HUB_Z) <= HUB_RADIUS;
     }
 
     private static void sendMenuCommand() {
@@ -184,6 +226,7 @@ public class AnarchyExecutor {
             reset();
             return;
         }
+        System.out.println("[HubSwap] Отправляем команду меню: " + menuCmd);
         client.getNetworkHandler().sendChatCommand(menuCmd);
 
         if ("lite".equals(mode)) {
@@ -192,6 +235,7 @@ public class AnarchyExecutor {
             state = State.WAITING_MENU;
         }
         ticks = 0;
+        arrivalTicks = 0;
     }
 
     private static void scanMenu1() {
@@ -204,7 +248,9 @@ public class AnarchyExecutor {
 
     private static void scanMenu() {
         Screen screen = client.currentScreen;
-        if (!(screen instanceof HandledScreen<?> handledScreen)) return;
+        if (!(screen instanceof HandledScreen<?> handledScreen)) {
+            return;
+        }
 
         Pattern pattern = getPatternForMode(mode);
         if (pattern == null) {
@@ -214,8 +260,19 @@ public class AnarchyExecutor {
 
         int slot = findSlotByLore(handledScreen, pattern, targetNumber);
         if (slot != -1) {
+            System.out.println("[HubSwap] Найден слот по лору: " + slot);
             clickSlot(handledScreen, slot);
             finishSuccess();
+            return;
+        }
+
+        slot = findSlotByItemCount(handledScreen, targetNumber);
+        if (slot != -1) {
+            System.out.println("[HubSwap] Найден слот по количеству: " + slot);
+            clickSlot(handledScreen, slot);
+            finishSuccess();
+        } else {
+            System.out.println("[HubSwap] Не найден слот для " + mode + " #" + targetNumber);
         }
     }
 
@@ -266,6 +323,20 @@ public class AnarchyExecutor {
         return -1;
     }
 
+    private static int findSlotByItemCount(HandledScreen<?> screen, int number) {
+        var handler = screen.getScreenHandler();
+        int containerSlots = handler.slots.size() - 36;
+        for (int i = 0; i < containerSlots; i++) {
+            ItemStack stack = handler.getSlot(i).getStack();
+            if (!stack.isEmpty() && stack.getItem() == Items.PLAYER_HEAD) {
+                if (stack.getCount() == number) {
+                    return i;
+                }
+            }
+        }
+        return -1;
+    }
+
     private static void clickSlot(HandledScreen<?> screen, int slot) {
         client.interactionManager.clickSlot(
                 screen.getScreenHandler().syncId,
@@ -286,61 +357,81 @@ public class AnarchyExecutor {
     }
 
     private static String readNbt(ItemStack stack, String key) {
-        if (!stack.hasNbt()) return null;
-        NbtCompound root = stack.getNbt();
-        if (root != null && root.contains("PublicBukkitValues")) {
-            NbtCompound values = root.getCompound("PublicBukkitValues");
-            String val = values.getString(key);
-            return val.isEmpty() ? null : val;
-        }
-        return null;
+        NbtComponent customData = stack.get(DataComponentTypes.CUSTOM_DATA);
+        if (customData == null) return null;
+        NbtCompound root = customData.copyNbt();
+        if (root == null || !root.contains("PublicBukkitValues")) return null;
+        NbtCompound values = root.getCompound("PublicBukkitValues").orElse(null);
+        if (values == null) return null;
+        return values.getString(key).orElse(null);
     }
 
     private static String getLoreText(ItemStack stack) {
-        if (!stack.hasNbt()) return null;
-        NbtCompound display = stack.getNbt().getCompound("display");
+        NbtComponent customData = stack.get(DataComponentTypes.CUSTOM_DATA);
+        if (customData == null) return null;
+        NbtCompound root = customData.copyNbt();
+        if (root == null) return null;
+
+        if (!root.contains("display")) return null;
+        NbtCompound display = root.getCompound("display").orElse(null);
         if (display == null) return null;
 
-        if (display.contains("Name")) {
-            String nameRaw = display.getString("Name");
-            try {
-                Text parsed = Serializer.fromJson(nameRaw);
-                if (parsed != null) {
-                    String nameText = parsed.getString();
-                    if (nameText != null && !nameText.isEmpty()) {
-                        return nameText;
+        if (display.contains("Lore")) {
+            NbtList loreList = display.getList("Lore").orElse(null);
+            if (loreList != null && !loreList.isEmpty()) {
+                StringBuilder fullText = new StringBuilder();
+                for (int i = 0; i < loreList.size(); i++) {
+                    String raw = loreList.getString(i).orElse(null);
+                    if (raw == null) continue;
+                    try {
+                        var jsonElement = JsonParser.parseString(raw);
+                        DataResult<Text> result = TextCodecs.CODEC.parse(JsonOps.INSTANCE, jsonElement);
+                        if (result.result().isPresent()) {
+                            Text parsed = result.result().get();
+                            fullText.append(parsed.getString());
+                        } else {
+                            fullText.append(raw);
+                        }
+                    } catch (Exception e) {
+                        fullText.append(raw);
                     }
+                    if (i < loreList.size() - 1) fullText.append(" ");
                 }
-            } catch (Exception ignored) {}
-        }
-
-        if (!display.contains("Lore")) return null;
-        var loreList = display.getList("Lore", 8);
-        if (loreList.isEmpty()) return null;
-
-        StringBuilder fullText = new StringBuilder();
-        for (int i = 0; i < loreList.size(); i++) {
-            String raw = loreList.getString(i);
-            try {
-                Text parsed = Serializer.fromJson(raw);
-                if (parsed != null) {
-                    fullText.append(parsed.getString());
-                } else {
-                    fullText.append(raw);
+                String result = fullText.toString().trim();
+                if (!result.isEmpty()) {
+                    System.out.println("[HubSwap] Извлечён лор: \"" + result + "\"");
+                    return result;
                 }
-            } catch (Exception e) {
-                fullText.append(raw);
             }
-            if (i < loreList.size() - 1) fullText.append(" ");
         }
-        String result = fullText.toString().trim();
-        return result.isEmpty() ? null : result;
+
+        if (display.contains("Name")) {
+            String nameRaw = display.getString("Name").orElse(null);
+            if (nameRaw != null) {
+                try {
+                    var jsonElement = JsonParser.parseString(nameRaw);
+                    DataResult<Text> result = TextCodecs.CODEC.parse(JsonOps.INSTANCE, jsonElement);
+                    if (result.result().isPresent()) {
+                        Text parsed = result.result().get();
+                        String nameText = parsed.getString();
+                        if (!nameText.isEmpty()) {
+                            System.out.println("[HubSwap] Извлечено имя: \"" + nameText + "\"");
+                            return nameText;
+                        }
+                    }
+                } catch (Exception ignored) {}
+                return nameRaw;
+            }
+        }
+
+        return null;
     }
 
     private static void finishSuccess() {
         HubSwap.getStats().recordSwitch(mode, targetNumber);
         HubSwap.saveStats();
         NotificationRenderer.showNotification("Успешный переход на " + mode + " #" + targetNumber);
+        System.out.println("[HubSwap] Переход успешно завершён на " + mode + " #" + targetNumber);
         reset();
     }
 
@@ -359,6 +450,7 @@ public class AnarchyExecutor {
         serverKey = null;
         prevWorld = null;
         ticks = 0;
+        arrivalTicks = 0;
     }
 
     public static boolean isBusy() {

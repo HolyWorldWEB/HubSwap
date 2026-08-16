@@ -59,10 +59,12 @@ public class HubSwapClient implements ClientModInitializer {
     }
 
     private void registerKeybinds() {
+        // В 1.21.11 используем KeyBinding.Category.MISC
         configMenuKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
                 "key.hubswap.config",
+                InputUtil.Type.KEYSYM,
                 295,
-                "category.hubswap.main"
+                KeyBinding.Category.MISC
         ));
     }
 
@@ -78,13 +80,11 @@ public class HubSwapClient implements ClientModInitializer {
 
         ModConfig config = HubSwap.getConfig();
 
-        // Основные жёсткие команды
         registerLiteral("ln", "lite", true);
         registerLiteral("ln120", "lite120", true);
         registerLiteral("cn", "classic", true);
         registerLiteral("pm", "prime", true);
 
-        // Алиасы с top/down для каждого алиаса отдельно
         registerAliases(config.getLite().getAliases(), "lite");
         registerAliases(config.getLite120().getAliases(), "lite120");
         registerAliases(config.getClassic().getAliases(), "classic");
@@ -122,7 +122,6 @@ public class HubSwapClient implements ClientModInitializer {
                         }));
 
         if (enableTopDown) {
-            // top
             cmd.then(ClientCommandManager.literal("top")
                     .then(ClientCommandManager.argument("step", IntegerArgumentType.integer(1))
                             .executes(ctx -> {
@@ -135,7 +134,6 @@ public class HubSwapClient implements ClientModInitializer {
                         return 1;
                     }));
 
-            // down
             cmd.then(ClientCommandManager.literal("down")
                     .then(ClientCommandManager.argument("step", IntegerArgumentType.integer(1))
                             .executes(ctx -> {
@@ -188,7 +186,7 @@ public class HubSwapClient implements ClientModInitializer {
                 for (HotkeySlot slot : slots) {
                     if (!slot.isEnabled() || slot.getKeyCode() < 0) continue;
                     int code = slot.getKeyCode();
-                    boolean nowDown = InputUtil.isKeyPressed(client.getWindow().getHandle(), code);
+                    boolean nowDown = InputUtil.isKeyPressed(client.getWindow(), code);
                     boolean wasDown = hotkeyPressed.getOrDefault(code, false);
 
                     if (nowDown && !wasDown) {

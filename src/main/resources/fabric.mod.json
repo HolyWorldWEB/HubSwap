@@ -4,8 +4,7 @@
   "version": "${version}",
   "name": "HubSwap",
   "description": "Универсальный авто-переход на сервера Lite / Lite120 / Classic / Prime с поддержкой настраиваемых алиасов и хоткеев.",
-  "authors": ["Heldyy", "Chelovek1234a"],
-  "contact": {},
+  "authors": ["Heldyy"],
   "license": "MIT",
   "icon": "assets/hubswap/icon.png",
   "environment": "client",
@@ -14,9 +13,9 @@
   },
   "mixins": ["hubswap.mixins.json"],
   "depends": {
-    "fabricloader": ">=0.15.0",
-    "minecraft": "1.20.1",
-    "fabric-api": "*",
-    "java": ">=17"
+    "fabricloader": ">=0.19.3",
+    "minecraft": "~1.21.11",
+    "java": ">=21",
+    "fabric-api": "*"
   }
 }

@@ -11,9 +11,6 @@ import java.io.BufferedWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Properties;
 import java.util.Timer;
 import java.util.TimerTask;
 
@@ -74,6 +71,14 @@ public class HubSwap {
         System.out.println("[HubSwap] Config reloaded.");
     }
 
+    /**
+     * Перезагружает статистику из файла (используется при открытии вкладки STATS в GUI)
+     */
+    public static void reloadStats() {
+        STATS = loadStatsInternal();
+        System.out.println("[HubSwap] Stats reloaded from file.");
+    }
+
     private static ModConfig loadConfigInternal() {
         if (Files.exists(CONFIG_PATH)) {
             try (BufferedReader r = Files.newBufferedReader(CONFIG_PATH, StandardCharsets.UTF_8)) {
@@ -95,10 +100,6 @@ public class HubSwap {
 
     private static void migrateFromOldConfigs() {
         // Миграция из старых файлов (оставлена как есть)
-    }
-
-    private static String name(String key) {
-        return key;
     }
 
     private static StatsData loadStatsInternal() {

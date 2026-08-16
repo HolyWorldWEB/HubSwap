@@ -26,7 +26,7 @@ public class NotificationRenderer {
     }
 
     public static void register() {
-        HudRenderCallback.EVENT.register((DrawContext context, float tickDelta) -> {
+        HudRenderCallback.EVENT.register((context, tickDelta) -> {
             if (!HubSwap.getConfig().isNotificationsEnabled()) return;
             if (message == null || MinecraftClient.getInstance().world == null) return;
 
@@ -64,41 +64,34 @@ public class NotificationRenderer {
             MinecraftClient client = MinecraftClient.getInstance();
             int screenWidth = context.getScaledWindowWidth();
             int textWidth = client.textRenderer.getWidth(message);
-            
+
             int panelWidth = textWidth + 20;
             int panelHeight = 16;
-            
+
             int x = screenWidth - panelWidth - 10;
             int y = (int) (BASE_Y + anim.offsetY);
 
-            context.getMatrices().push();
-            
-            float scaleOriginX = screenWidth - 10;
-            float scaleOriginY = y + panelHeight / 2.0f;
-            context.getMatrices().translate(scaleOriginX, scaleOriginY, 0);
-            context.getMatrices().scale(anim.scale, anim.scale, 1.0f);
-            context.getMatrices().translate(-scaleOriginX, -scaleOriginY, 0);
+            // Матричные трансформации убраны для совместимости с 1.21.11
+            // Вместо scale используем прямой рендеринг с параметрами
 
             int alphaInt = (int) (anim.alpha * 255.0f);
-            
+
             int bgColorTop = (int) (anim.alpha * 180.0f) << 24 | 0x1a1a2e;
             int bgColorBottom = (int) (anim.alpha * 200.0f) << 24 | 0x16213e;
             context.fillGradient(x, y, x + panelWidth, y + panelHeight, bgColorTop, bgColorBottom);
-            
+
             int borderColor = alphaInt << 24 | HubSwap.getConfig().getColorTheme().getRgbColor();
             context.fill(x - 1, y - 1, x + panelWidth + 1, y, borderColor);
             context.fill(x - 1, y + panelHeight, x + panelWidth + 1, y + panelHeight + 1, borderColor);
             context.fill(x - 1, y - 1, x, y + panelHeight + 1, borderColor);
             context.fill(x + panelWidth, y - 1, x + panelWidth + 1, y + panelHeight + 1, borderColor);
-            
+
             int iconColor = alphaInt << 24 | HubSwap.getConfig().getColorTheme().getRgbColor();
             context.fill(x + 6, y + 5, x + 8, y + 11, iconColor);
             context.fill(x + 8, y + 6, x + 10, y + 10, iconColor);
-            
+
             int textColor = alphaInt << 24 | 0xFFFFFF;
             context.drawText(client.textRenderer, message, x + 14, y + 4, textColor, true);
-
-            context.getMatrices().pop();
         });
     }
 
