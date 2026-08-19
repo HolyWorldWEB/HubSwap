@@ -30,7 +30,7 @@ public class UpdateChecker {
         if (checked) return;
         checked = true;
 
-        new Thread(() -> {
+        Thread thread = new Thread(() -> {
             try {
                 Thread.sleep(3500);
 
@@ -46,9 +46,12 @@ public class UpdateChecker {
                     sendUpdateMessage(latest.tagName, latest.htmlUrl);
                 }
 
-            } catch (Exception ignored) {
+            } catch (Exception e) {
+                System.err.println("[HubSwap] Update check failed: " + e.getMessage());
             }
-        }, "HubSwap Update Checker").start();
+        }, "HubSwap Update Checker");
+        thread.setDaemon(true);
+        thread.start();
     }
 
     private static String getCurrentVersion() {
@@ -62,33 +65,33 @@ public class UpdateChecker {
         URL url = new URL(GITHUB_API);
         HttpURLConnection connection = (HttpURLConnection) url.openConnection();
 
-        connection.setRequestMethod("GET");
-        connection.setConnectTimeout(5000);
-        connection.setReadTimeout(5000);
-        connection.setRequestProperty("User-Agent", "HubSwap-UpdateChecker");
+        try {
+            connection.setRequestMethod("GET");
+            connection.setConnectTimeout(5000);
+            connection.setReadTimeout(5000);
+            connection.setRequestProperty("User-Agent", "HubSwap-UpdateChecker");
 
-        if (connection.getResponseCode() != 200) {
-            return null;
-        }
-
-        StringBuilder response = new StringBuilder();
-
-        try (BufferedReader reader = new BufferedReader(
-                new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8)
-        )) {
-            String line;
-
-            while ((line = reader.readLine()) != null) {
-                response.append(line);
+            if (connection.getResponseCode() != 200) {
+                return null;
             }
+
+            StringBuilder response = new StringBuilder();
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8)
+            )) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    response.append(line);
+                }
+            }
+
+            JsonObject json = JsonParser.parseString(response.toString()).getAsJsonObject();
+            String tagName = json.has("tag_name") ? json.get("tag_name").getAsString() : null;
+            String htmlUrl = json.has("html_url") ? json.get("html_url").getAsString() : REPO_URL;
+            return new ReleaseInfo(tagName, htmlUrl);
+        } finally {
+            connection.disconnect();
         }
-
-        JsonObject json = JsonParser.parseString(response.toString()).getAsJsonObject();
-
-        String tagName = json.has("tag_name") ? json.get("tag_name").getAsString() : null;
-        String htmlUrl = json.has("html_url") ? json.get("html_url").getAsString() : REPO_URL;
-
-        return new ReleaseInfo(tagName, htmlUrl);
     }
 
     private static void sendUpdateMessage(String latestVersion, String url) {
@@ -105,11 +108,12 @@ public class UpdateChecker {
                     .append(Text.literal(latestVersion).formatted(Formatting.GREEN))
                     .append(Text.literal("  "));
 
+            String safeUrl = (url != null && url.startsWith("https://github.com/")) ? url : REPO_URL;
             Text link = Text.literal("[СКАЧАТЬ]")
                     .styled(style -> style
                             .withColor(Formatting.AQUA)
                             .withUnderline(true)
-                            .withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, url))
+                            .withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, safeUrl))
                             .withHoverEvent(new HoverEvent(
                                     HoverEvent.Action.SHOW_TEXT,
                                     Text.literal("Открыть страницу релиза HubSwap")
@@ -123,7 +127,10 @@ public class UpdateChecker {
     private static String normalizeVersion(String version) {
         if (version == null) return "0.0.0";
 
-        String clean = version.toLowerCase()
+        // Обрезаем метаданные (например, +mc1.20.1)
+        String base = version.split("[+-]")[0];
+
+        String clean = base.toLowerCase()
                 .replace("version", "")
                 .replaceAll("[^0-9.]", "")
                 .replaceAll("^\\.+", "")
@@ -153,13 +160,11 @@ public class UpdateChecker {
             String[] parts = cleanVersion.split("\\.");
 
             int index = 0;
-
             for (String part : parts) {
                 if (index >= 3) break;
                 if (part == null || part.isBlank()) continue;
 
                 String clean = part.replaceAll("[^0-9]", "");
-
                 if (!clean.isEmpty()) {
                     result[index] = Integer.parseInt(clean);
                     index++;
