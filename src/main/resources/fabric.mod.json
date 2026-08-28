@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
   "id": "hubswap",
-  "version": "2.0.0",
+  "version": "${version}",
   "name": "HubSwap",
   "description": "Универсальный авто-переход на сервера Lite / Lite120 / Classic / Prime с поддержкой настраиваемых алиасов и хоткеев.",
-  "authors": ["Heldyy"],
+  "authors": ["Heldyy", "Chelovek1234a"],
   "contact": {},
   "license": "MIT",
   "icon": "assets/hubswap/icon.png",
